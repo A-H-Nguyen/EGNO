@@ -1,7 +1,7 @@
 {
         "exp_name": "mocap_exp",
         "batch_size": 12,
-        "epochs": 2000,
+        "epochs": 5,
         "no_cuda": false,
         "seed": 1,
         "lr": 0.0005,
@@ -10,7 +10,7 @@
         "attention": 0,
         "n_layers": 6,
         "max_training_samples": 200,
-        "data_dir": "motion/dataset",
+        "data_dir": "${WORK}/EGNO/motion/dataset",
         "norm_diff": false,
         "learnable": false,
         "weight_decay": 1e-10,

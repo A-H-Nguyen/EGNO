@@ -28,7 +28,7 @@ class EGNO(EGNN):
     def forward(self, x, h, edge_index, edge_fea, v=None, loc_mean=None):  # [BN, H]
 
         T = self.num_timesteps
-
+        
         num_nodes = h.shape[0]
         num_edges = edge_index[0].shape[0]
 
@@ -64,4 +64,12 @@ class EGNO(EGNN):
                 v = temp[..., 1].view(T * num_nodes, 3)
 
             x, v, h = self.layers[i](x, h, edge_index, edge_fea, v=v)
+
+        # print("Here in EGNO forward pass:")
+
+
+        # print(f"var x:\tnumel:{x.numel()}\tnum_zeroes:{torch.sum((x == 0).int()).data[0]}")
+        # print(f"var v:\tnumel:{v.numel()}\tnum_zeroes:{torch.sum((v == 0).int()).data[0]}")
+        # print(f"var h:\tnumel:{h.numel()}\tnum_zeroes:{torch.sum((h == 0).int()).data[0]}")
+
         return (x, v, h) if v is not None else (x, h)

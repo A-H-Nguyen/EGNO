@@ -134,6 +134,7 @@ def layerwise_sparsity(model):
 
     print("=" * 55)
 
+@torch.compile
 def main():
     # fix seed
     seed = args.seed

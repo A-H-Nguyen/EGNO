@@ -12,10 +12,10 @@ class MotionDataset():
 
     def __init__(self, partition, max_samples, delta_frame, data_dir, case='walk'):
         if case == 'walk':
-            with open(os.path.join(data_dir, 'motion.pkl'), 'rb') as f:
+            with open(os.path.join(os.path.expandvars(data_dir), 'motion.pkl'), 'rb') as f:
                 edges, X = pkl.load(f)
         elif case == 'run':
-            with open(os.path.join(data_dir, 'motion_run.pkl'), 'rb') as f:
+            with open(os.path.join(os.path.expandvars(data_dir), 'motion_run.pkl'), 'rb') as f:
                 edges, X = pkl.load(f)
         else:
             raise RuntimeError('Unknown case')
@@ -32,12 +32,12 @@ class MotionDataset():
             train_case_id = [20, 1, 17, 13, 14, 9, 4, 2, 7, 5, 16]
             val_case_id = [3, 8, 11, 12, 15, 18]
             test_case_id = [6, 19, 21, 0, 22, 10]
-            split_dir = os.path.join(data_dir, 'split.pkl')
+            split_dir = os.path.join(os.path.expandvars(data_dir), 'split.pkl')
         elif case == 'run':
             train_case_id = [1, 2, 5, 6, 10]
             val_case_id = [0, 4, 9]
             test_case_id = [3, 7, 8]
-            split_dir = os.path.join(data_dir, 'split_run.pkl')
+            split_dir = os.path.join(os.path.expandvars(data_dir), 'split_run.pkl')
         else:
             raise RuntimeError('Unknown case')
 
@@ -165,10 +165,10 @@ class MotionDataset():
 class MotionDynamicsDataset(MotionDataset):
     def __init__(self, partition, max_samples, delta_frame, data_dir, case='walk', num_timesteps=6):
         if case == 'walk':
-            with open(os.path.join(data_dir, 'motion.pkl'), 'rb') as f:
+            with open(os.path.join(os.path.expandvars(data_dir), 'motion.pkl'), 'rb') as f:
                 edges, X = pkl.load(f)
         elif case == 'run':
-            with open(os.path.join(data_dir, 'motion_run.pkl'), 'rb') as f:
+            with open(os.path.join(os.path.expandvars(data_dir), 'motion_run.pkl'), 'rb') as f:
                 edges, X = pkl.load(f)
         else:
             raise RuntimeError('Unknown case')
@@ -185,12 +185,12 @@ class MotionDynamicsDataset(MotionDataset):
             train_case_id = [20, 1, 17, 13, 14, 9, 4, 2, 7, 5, 16]
             val_case_id = [3, 8, 11, 12, 15, 18]
             test_case_id = [6, 19, 21, 0, 22, 10]
-            split_dir = os.path.join(data_dir, 'split.pkl')
+            split_dir = os.path.join(os.path.expandvars(data_dir), 'split.pkl')
         elif case == 'run':
             train_case_id = [1, 2, 5, 6, 10]
             val_case_id = [0, 4, 9]
             test_case_id = [3, 7, 8]
-            split_dir = os.path.join(data_dir, 'split_run.pkl')
+            split_dir = os.path.join(os.path.expandvars(data_dir), 'split_run.pkl')
         else:
             raise RuntimeError('Unknown case')
 

@@ -5,7 +5,10 @@ import torch.utils.data
 from torchinfo import summary
 from motion.dataset import MotionDynamicsDataset as MotionDataset
 from model.egno import EGNO
+import model.basic as basic
+import model.layer_no as layer_no
 import os
+import sys
 from torch import nn, optim
 import json
 
@@ -15,6 +18,8 @@ import numpy as np
 import time
 
 from utils import EarlyStopping
+
+import hooks
 
 parser = argparse.ArgumentParser(description='EGNO')
 parser.add_argument('--exp_name', type=str, default='exp_1', metavar='N', help='experiment_name')
@@ -109,36 +114,51 @@ except OSError:
 
 # torch.autograd.set_detect_anomaly(True)
 
-# def compute_sparsity(model):
-#     total_params = 0
-#     zero_params = 0
-    
-#     for param in model.parameters():
-#         total_params += param.numel()  # Total number of elements
-#         zero_params += torch.sum(param == 0).item()  # Count of zero elements
-    #     sparsity = zero_params / total_params if total_params > 0 else 0
-#     print("=" * 55)
-#     print(f"Total Model Sparsity: {sparsity:.2%}")
-#     print("=" * 55)
-
 def layerwise_sparsity(model):
     print("Per-layer Model Sparsity:")
     print("=" * 55)
     
     for name, param in model.named_parameters():
         total = param.numel()
-        zeros = torch.sum(param == 0).item()
+        zeros = torch.sum(param < 1e-8).item()
         sparsity = (zeros / total) * 100 if total > 0 else 0
         
-        print(f"{name:<40} num elements: {total:>11.2f} sparsity: {sparsity:>11.2f}%")
+        if (sparsity > 40.0):
+            print(f"{name:<40} num elements: {total:>11.2f} sparsity: {sparsity:>11.2f}%")
 
+    print("=" * 55)
+
+def compute_module_sparsity(model, threshold=1e-8, report_threshold=40.0):
+    for name, module in model.named_modules():
+        total_elements = 0
+        total_zeros = 0
+
+        for param in module.parameters(recurse=True):  # only direct params
+            if param is not None:
+                total_elements += param.numel()
+                total_zeros += (param.abs() < threshold).sum().item()
+
+        if total_elements > 0:
+            sparsity = (total_zeros / total_elements) * 100
+            if sparsity > report_threshold:
+                print(f"{name:<40} num elements: {total_elements:>11,d} sparsity: {sparsity:>6.2f}%")
+
+def compute_sparsity(model):
+    total_params = 0
+    zero_params = 0
+    
+    for param in model.parameters():
+        total_params += param.numel()  # Total number of elements
+        zero_params += torch.sum(param < 1e-8).item()  # Count of zero elements
+        sparsity = zero_params / total_params if total_params > 0 else 0
+    print("=" * 55)
+    print(f"Total Model Sparsity: {sparsity:.2%}")
     print("=" * 55)
 
 def main():
     # fix seed
     seed = args.seed
-    random.seed(seed)
-    np.random.seed(seed)
+    random.seed(seed) np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
 
@@ -164,15 +184,21 @@ def main():
     else:
         raise NotImplementedError('Unknown model:', args.model)
 
-    print(model)
-    summary(model)
-    # compute_sparsity(model)
-    # layerwise_sparsity(model)
-
     optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-    model_save_path = os.path.join(args.outf, args.exp_name, 'saved_model.pth')
-    print(f'Model saved to {model_save_path}')
-    early_stopping = EarlyStopping(patience=50, verbose=True, path=model_save_path)
+    # model_save_path = os.path.join(args.outf, args.exp_name, 'saved_model.pth')
+    # print(f'Model saved to {model_save_path}')
+    # early_stopping = EarlyStopping(patience=50, verbose=True, path=model_save_path)
+
+    # sparsity_hooks = []
+    # timing_hooks = []
+    forward_hooks = []
+    for name, module in model.named_modules():
+        if isinstance(module, (basic.EGNN_Layer, layer_no.TimeConv, layer_no.TimeConv_x)):
+            # forward_hooks.append(module.register_forward_hook(hooks.make_running_sparsity_hook()))
+            forward_hooks.append(module.register_forward_hook(hooks.make_timing_hook()))
+            # hooks.append(module.register_forward_hook(timing_hook))
+            # hooks.append(module.register_forward_hook(sparsity_hook))
+
 
     results = {'eval epoch': [], 'val loss': [], 'test loss': [], 'train loss': []}
     best_val_loss = 1e8
@@ -181,7 +207,9 @@ def main():
     best_train_loss = 1e8
     best_lp_loss = 1e8
     
-    start_time = time.time()
+    start_time = time.perf_counter()
+
+    hooks.start_timers(model)
 
     for epoch in range(0, args.epochs):
         train_loss, lp_loss = train(model, optimizer, epoch, loader_train)
@@ -201,23 +229,48 @@ def main():
                 best_lp_loss = lp_loss
             print("*** Best Val Loss: %.5f \t Best Test Loss: %.5f \t Best epoch %d"
                   % (best_val_loss, best_test_loss, best_epoch))
-            early_stopping(val_loss, model)
-            if early_stopping.early_stop:
-                print("Early Stopping.")
-                break
+            # early_stopping(val_loss, model)
+            # if early_stopping.early_stop:
+            #     print("Early Stopping.")
+            #     break
 
         json_object = json.dumps(results, indent=4)
         with open(args.outf + "/" + args.exp_name + "/loss.json", "w") as outfile:
             outfile.write(json_object)
+
             
-    print(f"Total runtime: {time.time() - start_time} seconds")
+    
+    hooks.report_forward_times(model)
+    # hooks.report_average_sparsities(model)
+
+    # for name, module in model.named_modules():
+    #     if hasattr(module, '_forward_time'):
+    #         total_params = 0
+    #         zero_params = 0
+            
+    #         for param in module.parameters(recurse=True):
+    #             total_params += param.numel()  # Total number of elements
+    #             zero_params += torch.sum(param < 1e-8).item()  # Count of zero elements
+    #             sparsity = zero_params / total_params if total_params > 0 else 0
+    #         print("=" * 55)
+    #         print(f"{name} - Sparsity: {sparsity:.2%}, runtime: {module._forward_time}")
+
+    # print("=" * 55)
+    layerwise_sparsity(model)
+    print(f"Total runtime: {time.perf_counter() - start_time} seconds")
+
+    # print(model)
+    # summary(model)
+    # # compute_sparsity(model)
+    # layerwise_sparsity(model)
+
 
     return best_train_loss, best_val_loss, best_test_loss, best_epoch, best_lp_loss
 
 
 def train(model, optimizer, epoch, loader, backprop=True):
     
-    start_time = time.time()
+    start_time = time.perf_counter()
 
     if backprop:
         model.train()
@@ -277,7 +330,7 @@ def train(model, optimizer, epoch, loader, backprop=True):
     print('%s epoch %d avg loss: %.5f avg lploss: %.5f'
           % (prefix+loader.dataset.partition, epoch, res['loss'] / res['counter'], res['lp_loss'] / res['counter']))
 
-    print(f"\nepoch {epoch} took {time.time() - start_time} seconds\n")
+    # print(f"\nepoch {epoch} took {time.perf_counter() - start_time} seconds\n")
 
     return res['loss'] / res['counter'], res['lp_loss'] / res['counter']
 
